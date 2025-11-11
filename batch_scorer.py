@@ -8,14 +8,20 @@ def score_pdes_from_csv(input_file, output_file=None):
     
     if not Path(input_file).exists():
         print(f"Error: Input file '{input_file}' not found")
+        print(f"Please create a CSV file with columns: name, equation, domain, boundary_conditions")
         return None
     
-    df = pd.read_csv(input_file)
+    try:
+        df = pd.read_csv(input_file)
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        return None
     
     required_columns = ['name', 'equation', 'domain', 'boundary_conditions']
     missing = [col for col in required_columns if col not in df.columns]
     if missing:
         print(f"Error: Missing required columns: {missing}")
+        print(f"Required columns: {required_columns}")
         return None
     
     results = []
@@ -43,11 +49,15 @@ def score_pdes_from_csv(input_file, output_file=None):
                 scores['notes'] = row['notes']
             
             results.append(scores)
-            print(f"    Score: {scores['total']}")
+            print(f"    Complexity Score: {scores['total']}")
             
         except Exception as e:
             print(f"    Error: {str(e)}")
             continue
+    
+    if not results:
+        print("\nNo PDEs were successfully scored.")
+        return None
     
     results_df = pd.DataFrame(results)
     
@@ -65,7 +75,7 @@ def score_pdes_from_csv(input_file, output_file=None):
     
     if output_file:
         results_df.to_csv(output_file, index=False)
-        print(f"\n✓ Results saved to: {output_file}")
+        print(f"\nResults saved to: {output_file}")
     
     return results_df
 
@@ -75,7 +85,7 @@ def score_pdes_with_predictions(input_file, output_file=None):
     results_df = score_pdes_from_csv(input_file, output_file=None)
     
     if results_df is None:
-        return
+        return None
     
     results_df['predicted_l2_error'] = -6.11 + 2.73 * results_df['total']
     results_df['predicted_l2_error'] = results_df['predicted_l2_error'].round(2)
@@ -83,8 +93,13 @@ def score_pdes_with_predictions(input_file, output_file=None):
     print("\n" + "="*70)
     print("PERFORMANCE PREDICTIONS")
     print("="*70)
-    print("Using model: L2 Error (%) = -6.11 + 2.73 × Complexity Score")
-    print("Correlation: r = 0.845 (based on 8 PDEs)\n")
+    print("Model: L2 Error (%) = -6.11 + 2.73 × Complexity Score")
+    print("Correlation: r = 0.845 (based on 8 PDEs from QCPINN paper + extensions)")
+    print("\nInterpretation:")
+    print("  Complexity 0-4:  Use classical PINN (quantum overkill)")
+    print("  Complexity 5-9:  Use QCPINN (sweet spot for quantum advantage)")
+    print("  Complexity 10+:  Both methods struggle (research frontier)")
+    print()
     
     prediction_df = results_df[['name', 'total', 'predicted_l2_error']].copy()
     prediction_df.columns = ['PDE', 'Complexity', 'Predicted L2 Error (%)']
@@ -92,7 +107,7 @@ def score_pdes_with_predictions(input_file, output_file=None):
     
     if output_file:
         results_df.to_csv(output_file, index=False)
-        print(f"\n✓ Results saved to: {output_file}")
+        print(f"\nResults saved to: {output_file}")
     
     return results_df
 
@@ -101,7 +116,20 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description='Score PDE complexity from CSV file'
+        description='Score PDE complexity from CSV file',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Example CSV format (save as 'pdes.csv'):
+
+name,equation,domain,boundary_conditions,notes
+Helmholtz,laplacian(u) + k**2 * u = f,"[-1,1] x [-1,1]",u = h on boundary,Test case
+Burgers,u_t + u*u_x = nu*u_xx,"[0,1] x [0,T]","u(0,t)=0, u(1,t)=0",Nonlinear
+
+Usage examples:
+  python batch_scorer.py pdes.csv
+  python batch_scorer.py pdes.csv -o results.csv
+  python batch_scorer.py pdes.csv -o results.csv --predict
+        """
     )
     parser.add_argument(
         'input_file',
@@ -115,7 +143,7 @@ def main():
     parser.add_argument(
         '-p', '--predict',
         action='store_true',
-        help='Include L2 error predictions'
+        help='Include L2 error predictions based on complexity'
     )
     
     args = parser.parse_args()
@@ -131,13 +159,15 @@ if __name__ == "__main__":
         print("="*70)
         print("BATCH PDE COMPLEXITY SCORER")
         print("="*70)
-        print("\nUsage:")
+        print("\nScores PDEs from CSV file using complexity framework")
+        print("Based on: Farea et al. (2025) QCPINN paper analysis\n")
+        print("Usage:")
         print("  python batch_scorer.py input.csv")
         print("  python batch_scorer.py input.csv -o results.csv")
-        print("  python batch_scorer.py input.csv -o results.csv --predict")
-        print("\nExample:")
-        print("  python batch_scorer.py data/qcpinn_pdes.csv -o data/results.csv -p")
-        print("\nFor help:")
+        print("  python batch_scorer.py input.csv -o results.csv --predict\n")
+        print("Example:")
+        print("  python batch_scorer.py data/qcpinn_pdes.csv -o data/results.csv -p\n")
+        print("For detailed help:")
         print("  python batch_scorer.py --help")
     else:
         main()
